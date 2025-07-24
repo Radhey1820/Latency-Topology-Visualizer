@@ -1,5 +1,5 @@
 {
-  "name": "crypto-latency-map",
+  "name": "latency-topology-visualizer",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,14 +9,19 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@react-three/drei": "^10.5.2",
+    "@react-three/fiber": "^9.2.0",
+    "mapbox-gl": "^3.13.0",
+    "next": "15.4.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.4.2"
+    "three": "^0.178.0"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^20",
     "@types/react": "^19",
-    "@types/react-dom": "^19"
+    "@types/react-dom": "^19",
+    "typescript": "^5"
   }
 }
