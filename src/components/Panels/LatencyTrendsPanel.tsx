@@ -1,6 +1,6 @@
 import { ASN_MAP, SERVERS } from '@/constants';
 import { useWorldMapContext } from '@/contexts/WorldMapContext';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -12,15 +12,39 @@ import {
 } from 'recharts';
 
 interface LatencyTrendsPanelProps {
+  /**
+   * Controls the visibility of the LatencyTrendsPanel.
+   */
   open: boolean;
+  /**
+   * Callback function to close the panel.
+   */
   onClose: () => void;
 }
 
 type LatencyEntry = {
+  /**
+   * Formatted timestamp string of the latency measurement (e.g., 'YYYY-MM-DD HH:mm').
+   */
   time: string;
+  /**
+   * Latency value in milliseconds or null if not available.
+   */
   latency: number | null;
 };
 
+/**
+ * LatencyTrendsPanel component displays historical latency trends between two servers.
+ * It fetches latency data from an API according to selected server pair and time range,
+ * and visualizes latency over time in a line chart with min, max, and average statistics.
+ *
+ * The component uses context to read and set server pairs and time ranges, and manages internal
+ * loading, error, and history state related to API data fetching.
+ *
+ * @component
+ * @param {LatencyTrendsPanelProps} props - Component props.
+ * @returns {JSX.Element | null} The rendered latency trends panel or null if closed/not initialized.
+ */
 function LatencyTrendsPanel({ open, onClose }: LatencyTrendsPanelProps) {
   const { serverPair, setServerPair, timeRange, setTimeRange } =
     useWorldMapContext();
@@ -28,99 +52,148 @@ function LatencyTrendsPanel({ open, onClose }: LatencyTrendsPanelProps) {
   const [history, setHistory] = useState<LatencyEntry[]>([]);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!serverPair) return;
-    const [srcIdx, dstIdx] = serverPair;
-    const srcServer = SERVERS[srcIdx];
-    const dstServer = SERVERS[dstIdx];
-    const srcASN = ASN_MAP[srcServer.id as keyof typeof ASN_MAP];
-    const dstASN = ASN_MAP[dstServer.id as keyof typeof ASN_MAP];
+  // Extract source and destination servers and their ASN values from context and constants
+  const [srcIdx, dstIdx] = serverPair ?? [-1, -1];
+  const srcServer = srcIdx >= 0 ? SERVERS[srcIdx] : null;
+  const dstServer = dstIdx >= 0 ? SERVERS[dstIdx] : null;
+  const srcASN = srcServer
+    ? ASN_MAP[srcServer.id as keyof typeof ASN_MAP]
+    : null;
+  const dstASN = dstServer
+    ? ASN_MAP[dstServer.id as keyof typeof ASN_MAP]
+    : null;
 
-    // Calculate time range
+  /**
+   * Effect hook to fetch historical latency data on changes in selected server pair or time range.
+   * Fetches data from the API with aggregation interval and date range based on selected time range.
+   * The fetched data is parsed, converted, and stored as latency history state.
+   */
+  useEffect(() => {
+    if (!serverPair || srcASN == null || dstASN == null) return;
+
     const now = new Date();
-    let start = new Date(now),
-      interval = '1h';
+    const start = new Date(now);
+    let interval = '1h';
+
+    // Determine start time and aggregation interval per selected time range
     switch (timeRange) {
       case '15m':
-        // Subtract 15 minutes from current time
         start.setMinutes(now.getMinutes() - 15);
+        interval = '1m';
         break;
       case '1h':
-        // Subtract 1 hour from current time
         start.setHours(now.getHours() - 1);
-        interval = '15m'; // finer interval for 1 hour range
+        interval = '15m';
         break;
       case '1d':
-        // Subtract 1 day (24 hours)
-        start.setDate(now.getDate() - 1);
-        interval = '1h'; // 1-hour aggregation for a day
-        break;
-      case '1w':
-        // Subtract 7 days (1 week)
-        start.setDate(now.getDate() - 7);
-        interval = '4h'; // 4-hour aggregation for week range
-        break;
-      default:
-        // Fallback to 1 day
         start.setDate(now.getDate() - 1);
         interval = '1h';
+        break;
+      case '1w':
+        start.setDate(now.getDate() - 7);
+        interval = '4h';
+        break;
+      default:
+        start.setDate(now.getDate() - 1);
+        interval = '1h';
+        break;
     }
+
     const dateStart = start.toISOString();
     const dateEnd = now.toISOString();
 
-    setLoading(true);
-    setHistory([]);
-    setError('');
+    async function fetchData() {
+      setLoading(true);
+      setError('');
+      setHistory([]);
 
-    fetch(
-      `api/trend-chart?aggInterval=${interval}&dateStart=${dateStart}&dateEnd=${dateEnd}&srcASN=${srcASN}&dstASN=${dstASN}`
-    )
-      .then((res) => res.json())
-      .then((json) => {
+      try {
+        const response = await fetch(
+          `api/trend-chart?aggInterval=${interval}&dateStart=${dateStart}&dateEnd=${dateEnd}&srcASN=${srcASN}&dstASN=${dstASN}`
+        );
+        const json = await response.json();
+
         if (
           !json.success ||
-          !json.result?.pair ||
-          !json.result.pair.timestamps ||
+          !json.result?.pair?.timestamps ||
           !json.result.pair.values
         ) {
           setError('No data returned from API');
           setLoading(false);
           return;
         }
-        const timestamps = json.result.pair.timestamps;
-        const values = json.result.pair.values;
-        // ms conversion (values may be null)
-        const data = timestamps.map((ts: string, idx: string | number) => ({
-          time: ts.slice(0, 16).replace('T', ' '), // show as 'YYYY-MM-DD HH:mm'
-          latency: values[idx] === null ? null : Math.round(values[idx] * 1000),
-        }));
+
+        const { timestamps, values } = json.result.pair;
+
+        // Map timestamps and values to LatencyEntry array, converting values to milliseconds
+        const data: LatencyEntry[] = timestamps.map(
+          (ts: string, idx: number) => ({
+            time: ts.slice(0, 16).replace('T', ' '), // Format 'YYYY-MM-DD HH:mm'
+            latency:
+              values[idx] === null ? null : Math.round(values[idx] * 1000),
+          })
+        );
+
         setHistory(data);
+      } catch (err) {
+        setError(`Error fetching data: ${String(err)}`);
+      } finally {
         setLoading(false);
-      })
-      .catch((err) => {
-        setError('Error fetching data: ' + String(err));
-        setLoading(false);
-      });
-  }, [serverPair, timeRange]);
+      }
+    }
+
+    fetchData();
+  }, [serverPair, srcASN, dstASN, timeRange]);
+
+  // Memoize the latency entries that have valid (non-null) latency values
+  const validHistory = useMemo(
+    () => history.filter((entry) => entry.latency !== null),
+    [history]
+  );
+
+  // Compute minimal latency from valid data or 'N/A' if no data
+  const minLatency = useMemo(
+    () =>
+      validHistory.length > 0
+        ? Math.min(...validHistory.map((e) => e.latency!))
+        : 'N/A',
+    [validHistory]
+  );
+
+  // Compute maximal latency from valid data or 'N/A'
+  const maxLatency = useMemo(
+    () =>
+      validHistory.length > 0
+        ? Math.max(...validHistory.map((e) => e.latency!))
+        : 'N/A',
+    [validHistory]
+  );
+
+  // Compute average latency from valid data or 'N/A'
+  const avgLatency = useMemo(() => {
+    if (validHistory.length === 0) return 'N/A';
+    const sum = validHistory.reduce((acc, cur) => acc + (cur.latency ?? 0), 0);
+    return (sum / validHistory.length).toFixed(1);
+  }, [validHistory]);
+
+  // Memoize the option elements for server pair selector to optimize rendering
+  const serverPairOptions = useMemo(() => {
+    const options = [];
+    for (let i = 0; i < SERVERS.length; i++) {
+      for (let j = 0; j < SERVERS.length; j++) {
+        if (i !== j) {
+          options.push(
+            <option key={`${i}-${j}`} value={`${i}-${j}`}>
+              {SERVERS[i].name} &rarr; {SERVERS[j].name}
+            </option>
+          );
+        }
+      }
+    }
+    return options;
+  }, []);
 
   if (!open || !serverPair) return null;
-  const [srcIdx, dstIdx] = serverPair;
-  const valid =
-    history && Array.isArray(history)
-      ? history.filter((d) => d.latency !== null)
-      : [];
-  const min = valid.length
-    ? Math.min(...valid.map((d: { latency: any }) => d.latency))
-    : 'N/A';
-  const max = valid.length
-    ? Math.max(...valid.map((d: { latency: any }) => d.latency))
-    : 'N/A';
-  const avg = valid.length
-    ? (
-        valid.reduce((a: any, b: { latency: any }) => a + b.latency, 0) /
-        valid.length
-      ).toFixed(1)
-    : 'N/A';
 
   return (
     <div
@@ -142,12 +215,16 @@ function LatencyTrendsPanel({ open, onClose }: LatencyTrendsPanelProps) {
           marginBottom: 8,
           display: 'flex',
           justifyContent: 'space-between',
+          alignItems: 'center',
         }}
       >
         <b>Historical Latency Trends</b>
-        <button onClick={onClose}>Close</button>
+        <button onClick={onClose} style={{ cursor: 'pointer' }}>
+          Close
+        </button>
       </div>
-      <div style={{ marginBottom: 8 }}>
+
+      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center' }}>
         <label>
           <small>Exchange Pair:&nbsp;</small>
           <select
@@ -157,17 +234,10 @@ function LatencyTrendsPanel({ open, onClose }: LatencyTrendsPanelProps) {
               setServerPair([a, b]);
             }}
           >
-            {SERVERS.map((sA, i) =>
-              SERVERS.map((sB, j) =>
-                i !== j ? (
-                  <option key={`${i}-${j}`} value={`${i}-${j}`}>
-                    {sA.name} &rarr; {sB.name}
-                  </option>
-                ) : null
-              )
-            )}
+            {serverPairOptions}
           </select>
         </label>
+
         <label style={{ marginLeft: 12 }}>
           <small>Time Range:&nbsp;</small>
           <select
@@ -176,36 +246,44 @@ function LatencyTrendsPanel({ open, onClose }: LatencyTrendsPanelProps) {
               setTimeRange(e.target.value as '15m' | '1h' | '1d' | '1w')
             }
           >
-            <option value='1h'>15m</option>
-            <option value='24h'>1h</option>
-            <option value='7d'>1d</option>
-            <option value='30d'>1w</option>
+            <option value='15m'>15m</option>
+            <option value='1h'>1h</option>
+            <option value='1d'>1d</option>
+            <option value='1w'>1w</option>
           </select>
         </label>
       </div>
+
       <div>
         <small style={{ opacity: 0.8 }}>
-          <b>{SERVERS[srcIdx].name}</b> &rarr; <b>{SERVERS[dstIdx].name}</b>
+          <b>{srcServer?.name}</b> &rarr; <b>{dstServer?.name}</b>
         </small>
       </div>
+
       <div
-        style={{ margin: '8px 0', display: 'flex', gap: '1em', fontSize: 15 }}
+        style={{
+          margin: '8px 0',
+          display: 'flex',
+          gap: '1em',
+          fontSize: 15,
+        }}
       >
         <span>
-          Min: <b>{min} ms</b>
+          Min: <b>{minLatency} ms</b>
         </span>
         <span>
-          Max: <b>{max} ms</b>
+          Max: <b>{maxLatency} ms</b>
         </span>
         <span>
-          Avg: <b>{avg} ms</b>
+          Avg: <b>{avgLatency} ms</b>
         </span>
       </div>
+
       <div
         style={{
           border: '1px solid #3338',
           borderRadius: 6,
-          padding: '6px',
+          padding: 6,
           marginBottom: 4,
           height: 210,
           background: '#111c',
@@ -217,7 +295,7 @@ function LatencyTrendsPanel({ open, onClose }: LatencyTrendsPanelProps) {
           <span style={{ color: 'salmon' }}>{error}</span>
         ) : (
           <ResponsiveContainer width='100%' height={190}>
-            <LineChart data={history || []}>
+            <LineChart data={history}>
               <CartesianGrid stroke='#3334' />
               <XAxis dataKey='time' tick={{ fontSize: 11 }} minTickGap={15} />
               <YAxis tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
@@ -235,7 +313,8 @@ function LatencyTrendsPanel({ open, onClose }: LatencyTrendsPanelProps) {
           </ResponsiveContainer>
         )}
       </div>
-      <small style={{ opacity: 0.6 }}>
+
+      <small style={{ opacity: 0.6, userSelect: 'none' }}>
         Powered by Cloudflare Radar Netflows API.
       </small>
     </div>

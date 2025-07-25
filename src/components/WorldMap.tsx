@@ -16,6 +16,14 @@ import { REGIONS, SERVERS } from '@/constants';
 import { Server } from '@/types';
 import { useWorldMapContext } from '@/contexts/WorldMapContext';
 
+/**
+ * WorldMap component renders an interactive 3D globe visualization
+ * displaying server markers, latency lines, and regional data.
+ * It supports filtering by provider and latency level, and shows latency trends.
+ *
+ * @component
+ * @returns {JSX.Element} The rendered WorldMap component with 3D globe and UI panels.
+ */
 export default function WorldMap() {
   const {
     exchangeFilter,
@@ -30,9 +38,22 @@ export default function WorldMap() {
     setShowTrends,
     showTrends,
   } = useWorldMapContext();
+
+  /**
+   * Currently selected server by user interaction.
+   * @type {[Server | null, React.Dispatch<React.SetStateAction<Server | null>>]}
+   */
   const [selected, setSelected] = useState<Server | null>(null);
+
+  /**
+   * List of latency objects representing network latencies between server pairs.
+   * @type {[Latency[], React.Dispatch<React.SetStateAction<Latency[]>>]}
+   */
   const [latencies, setLatencies] = useState<Latency[]>([]);
 
+  /**
+   * Filter the servers based on the exchangeFilter text and providerFilters.
+   */
   const filteredServers = SERVERS.filter((server) => {
     const searchText = exchangeFilter.toLowerCase();
     const matchesSearch =
@@ -43,12 +64,20 @@ export default function WorldMap() {
     return matchesSearch && providerSelected;
   });
 
+  /**
+   * Determines the latency level classification based on latency in milliseconds.
+   * @param {number} ms - Latency in milliseconds.
+   * @returns {'low' | 'medium' | 'high'} Latency level as a string.
+   */
   function getLatencyLevel(ms: number) {
     if (ms < 200) return 'low';
     if (ms < 400) return 'medium';
     return 'high';
   }
 
+  /**
+   * Filters latency data according to selected latency filter and provider restrictions.
+   */
   const filteredLatencies = latencies.filter((latency) => {
     if (latencyFilter !== 'all') {
       const level = getLatencyLevel(latency.value);
@@ -69,17 +98,28 @@ export default function WorldMap() {
     return matchesFrom && matchesTo;
   });
 
+  /**
+   * Filter regions by currently selected providers.
+   */
   const filteredRegions = REGIONS.filter(
     (region) => providerFilters[region.provider]
   );
 
+  /**
+   * Boolean flag to indicate if the component is running on the client.
+   * Necessary due to server/client rendering differences.
+   */
   const [isClient, setIsClient] = useState(false);
   useEffect(() => setIsClient(true), []);
 
+  /**
+   * Effect to update server pair and UI state when a server marker is selected.
+   * Sets default target server index and toggles trend display accordingly.
+   */
   useEffect(() => {
     if (selected) {
       const srcIdx = SERVERS.findIndex((s) => s.id === selected.id);
-      const dstIdx = (srcIdx + 1) % SERVERS.length; // default dst server
+      const dstIdx = (srcIdx + 1) % SERVERS.length; // default destination server
       setServerPair([srcIdx, dstIdx]);
       setShowTrends(true);
     } else {
@@ -88,6 +128,10 @@ export default function WorldMap() {
     }
   }, [selected]);
 
+  /**
+   * Fetches latency data from the Cloudflare latency API every 10 seconds
+   * and updates latency state with parsed latency values.
+   */
   useEffect(() => {
     const fetchLatency = async () => {
       try {
@@ -95,18 +139,17 @@ export default function WorldMap() {
         const json = await res.json();
 
         if (json.success && json.result?.serie_0) {
-          const timestamps = json.result.serie_0.timestamps;
           const values = json.result.serie_0.values;
 
-          // Find the latest non-null value
+          // Find the latest non-null value in the latency values array
           const latestNormalized: number | null | undefined = (
             values as (number | null | undefined)[]
           )
             .reverse()
-            .find((v: number | null | undefined) => v !== null);
+            .find((v) => v !== null);
           if (!latestNormalized) return;
 
-          const latencyMs = Math.round(latestNormalized * 1000); // normalized to ms
+          const latencyMs = Math.round(latestNormalized * 1000); // Convert normalized value to ms
 
           const latencies: Latency[] = [
             {
@@ -138,12 +181,14 @@ export default function WorldMap() {
     return () => clearInterval(interval);
   }, []);
 
+  // While server-side rendering or before client hydration, render a placeholder div
   if (!isClient) {
     return (
       <div style={{ width: '100vw', height: '100vh', background: '#181E2A' }} />
     );
   }
 
+  // Render the 3D globe, controls, markers, and filtering panels
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#181E2A' }}>
       <Canvas camera={{ position: [0, 0, 5] }} gl={{ antialias: false }}>

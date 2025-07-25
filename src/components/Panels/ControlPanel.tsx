@@ -1,12 +1,25 @@
 import { useWorldMapContext } from '@/contexts/WorldMapContext';
 import React from 'react';
 
+/**
+ * Color mapping for cloud providers used in UI elements.
+ */
 export const REGION_COLORS = {
   aws: 'orange',
   azure: 'deepskyblue',
   gcp: 'limegreen',
-};
+} as const;
 
+/**
+ * ControlPanel component provides an interactive UI panel for filtering and controlling
+ * the world map visualization of cloud providers, latency ranges, and data display options.
+ *
+ * It connects to the world map context to read and update state related to search filters,
+ * cloud provider visibility, latency range, visualization layers, and displays FPS performance.
+ *
+ * @component
+ * @returns {JSX.Element} The rendered control panel UI element.
+ */
 function ControlPanel() {
   const {
     exchangeFilter,
@@ -23,6 +36,7 @@ function ControlPanel() {
     setShowRegions,
     showRegions,
   } = useWorldMapContext();
+
   return (
     <div
       style={{
@@ -38,6 +52,7 @@ function ControlPanel() {
         width: 300,
       }}
     >
+      {/* Search input to filter exchanges and regions by text */}
       <div style={{ marginBottom: 12 }}>
         <label>
           Search Exchanges/Regions:
@@ -51,6 +66,7 @@ function ControlPanel() {
         </label>
       </div>
 
+      {/* Cloud provider filtering checkboxes */}
       <div style={{ marginBottom: 12 }}>
         <b>Cloud Provider Filters</b>
         <br />
@@ -82,6 +98,7 @@ function ControlPanel() {
         ))}
       </div>
 
+      {/* Latency range selector dropdown */}
       <div style={{ marginBottom: 12 }}>
         <b>Latency Range</b>
         <br />
@@ -97,6 +114,7 @@ function ControlPanel() {
         </select>
       </div>
 
+      {/* Visualization layer toggles (checkboxes) */}
       <div style={{ marginBottom: 12 }}>
         <b>Visualization Layers</b>
         <br />
@@ -126,6 +144,7 @@ function ControlPanel() {
         </label>
       </div>
 
+      {/* Display current FPS (frames per second) */}
       <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #444' }}>
         <b>Performance Metrics</b>
         <br />
