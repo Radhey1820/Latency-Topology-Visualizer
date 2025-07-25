@@ -1,5 +1,10 @@
 import WorldMap from '@/components/WorldMap';
+import { WorldMapProvider } from '@/contexts/WorldMapContext';
 
 export default function Home() {
-  return <WorldMap />;
+  return (
+    <WorldMapProvider>
+      <WorldMap />
+    </WorldMapProvider>
+  );
 }
