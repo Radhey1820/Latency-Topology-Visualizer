@@ -79,7 +79,7 @@ function LatencyTrendsPanel({ open, onClose }: LatencyTrendsPanelProps) {
     switch (timeRange) {
       case '15m':
         start.setMinutes(now.getMinutes() - 15);
-        interval = '1m';
+        interval = '15m';
         break;
       case '1h':
         start.setHours(now.getHours() - 1);
@@ -100,7 +100,7 @@ function LatencyTrendsPanel({ open, onClose }: LatencyTrendsPanelProps) {
     }
 
     const dateStart = start.toISOString();
-    const dateEnd = now.toISOString();
+    const dateEnd = new Date(Date.now() - 1000).toISOString();
 
     async function fetchData() {
       setLoading(true);
