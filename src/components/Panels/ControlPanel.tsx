@@ -1,5 +1,5 @@
 import { useWorldMapContext } from '@/contexts/WorldMapContext';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 /**
  * Color mapping for cloud providers used in UI elements.
@@ -13,9 +13,7 @@ export const REGION_COLORS = {
 /**
  * ControlPanel component provides an interactive UI panel for filtering and controlling
  * the world map visualization of cloud providers, latency ranges, and data display options.
- *
- * It connects to the world map context to read and update state related to search filters,
- * cloud provider visibility, latency range, visualization layers, and displays FPS performance.
+ * This version adapts layout and styles based on screen size for responsive usability.
  *
  * @component
  * @returns {JSX.Element} The rendered control panel UI element.
@@ -37,46 +35,106 @@ function ControlPanel() {
     showRegions,
   } = useWorldMapContext();
 
+  // Responsive screen size detection
+  const [screenSize, setScreenSize] = useState<'small' | 'medium' | 'large'>(
+    'large'
+  );
+
+  useEffect(() => {
+    function updateSize() {
+      const width = window.innerWidth;
+      if (width < 600) setScreenSize('small');
+      else if (width >= 600 && width < 1024) setScreenSize('medium');
+      else setScreenSize('large');
+    }
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
+
+  // Responsive style adjustments
+  const panelStyle: React.CSSProperties = {
+    position: 'fixed',
+    background: '#222c',
+    color: 'white',
+    padding: screenSize === 'small' ? '1rem' : 12,
+    borderRadius: screenSize === 'small' ? '12px 12px 0 0' : 8,
+    userSelect: 'none',
+    zIndex: 1000,
+    width:
+      screenSize === 'small' ? '100%' : screenSize === 'medium' ? 280 : 300,
+    maxHeight: screenSize === 'small' ? '40vh' : 'auto',
+    bottom: screenSize === 'small' ? 0 : 'auto',
+    top: screenSize !== 'small' ? 20 : 'auto',
+    left: screenSize === 'large' ? 190 : screenSize === 'medium' ? 10 : 0,
+    overflowY: screenSize === 'small' ? 'auto' : 'visible',
+    boxSizing: 'border-box',
+    fontSize: screenSize === 'small' ? 16 : 14,
+    // Add touch-friendly enhancements
+    display: 'flex',
+    flexDirection: 'column',
+    gap: screenSize === 'small' ? 12 : 8,
+  };
+
+  // Style for input/select elements for better touch targets
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    marginTop: 4,
+    fontSize: screenSize === 'small' ? 16 : 14,
+    padding: '6px 8px',
+    borderRadius: 4,
+    border: '1px solid #555',
+    backgroundColor: '#111',
+    color: 'white',
+  };
+
+  // Checkbox label style for spacing and accessibility
+  const checkboxLabelStyle: React.CSSProperties = {
+    marginRight: 12,
+    display: 'inline-block',
+    marginTop: screenSize === 'small' ? 12 : 6,
+    fontSize: screenSize === 'small' ? 16 : 14,
+    cursor: 'pointer',
+  };
+
+  // Button-like style for toggle checkboxes on mobile
+  const checkboxStyle: React.CSSProperties = {
+    cursor: 'pointer',
+    width: 18,
+    height: 18,
+  };
+
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 20,
-        left: 190,
-        background: '#222c',
-        color: 'white',
-        padding: 12,
-        borderRadius: 8,
-        userSelect: 'none',
-        zIndex: 1000,
-        width: 300,
-      }}
-    >
+    <div style={panelStyle}>
       {/* Search input to filter exchanges and regions by text */}
-      <div style={{ marginBottom: 12 }}>
+      <div>
         <label>
           Search Exchanges/Regions:
           <input
             type='text'
             value={exchangeFilter}
             onChange={(e) => setExchangeFilter(e.target.value)}
-            style={{ width: '100%', marginTop: 4 }}
+            style={inputStyle}
             placeholder='Type to search...'
+            aria-label='Search Exchanges or Regions'
+            autoComplete='off'
           />
         </label>
       </div>
 
       {/* Cloud provider filtering checkboxes */}
-      <div style={{ marginBottom: 12 }}>
+      <div>
         <b>Cloud Provider Filters</b>
         <br />
         {['aws', 'azure', 'gcp'].map((key) => (
           <label
             key={key}
-            style={{ marginRight: 12, display: 'inline-block', marginTop: 6 }}
+            style={checkboxLabelStyle}
+            htmlFor={`provider-filter-${key}`}
           >
             <input
               type='checkbox'
+              id={`provider-filter-${key}`}
               checked={providerFilters[key as keyof typeof REGION_COLORS]}
               onChange={() =>
                 setProviderFilters((f) => ({
@@ -84,12 +142,14 @@ function ControlPanel() {
                   [key]: !f[key as keyof typeof REGION_COLORS],
                 }))
               }
+              style={checkboxStyle}
             />
             <span
               style={{
                 marginLeft: 6,
                 textTransform: 'uppercase',
                 color: REGION_COLORS[key as keyof typeof REGION_COLORS],
+                userSelect: 'none',
               }}
             >
               {key}
@@ -99,13 +159,14 @@ function ControlPanel() {
       </div>
 
       {/* Latency range selector dropdown */}
-      <div style={{ marginBottom: 12 }}>
+      <div>
         <b>Latency Range</b>
         <br />
         <select
           value={latencyFilter}
           onChange={(e) => setLatencyFilter(e.target.value as any)}
-          style={{ width: '100%' }}
+          style={inputStyle}
+          aria-label='Select Latency Range'
         >
           <option value='all'>All</option>
           <option value='low'>&lt; 200 ms</option>
@@ -115,37 +176,52 @@ function ControlPanel() {
       </div>
 
       {/* Visualization layer toggles (checkboxes) */}
-      <div style={{ marginBottom: 12 }}>
+      <div>
         <b>Visualization Layers</b>
         <br />
-        <label style={{ display: 'block', marginTop: 6 }}>
-          <input
-            type='checkbox'
-            checked={showRealTime}
-            onChange={() => setShowRealTime((v) => !v)}
-          />
-          Real-time Data
-        </label>
-        <label style={{ display: 'block', marginTop: 6 }}>
-          <input
-            type='checkbox'
-            checked={showHistorical}
-            onChange={() => setShowHistorical((v) => !v)}
-          />
-          Historical Trends
-        </label>
-        <label style={{ display: 'block', marginTop: 6 }}>
-          <input
-            type='checkbox'
-            checked={showRegions}
-            onChange={() => setShowRegions((v) => !v)}
-          />
-          Cloud Provider Regions
-        </label>
+        {[
+          {
+            label: 'Real-time Data',
+            value: showRealTime,
+            setter: setShowRealTime,
+            id: 'vis-real-time',
+          },
+          {
+            label: 'Historical Trends',
+            value: showHistorical,
+            setter: setShowHistorical,
+            id: 'vis-historical',
+          },
+          {
+            label: 'Cloud Provider Regions',
+            value: showRegions,
+            setter: setShowRegions,
+            id: 'vis-regions',
+          },
+        ].map(({ label, value, setter, id }) => (
+          <label key={id} style={{ ...checkboxLabelStyle, display: 'block' }}>
+            <input
+              type='checkbox'
+              id={id}
+              checked={value}
+              onChange={() => setter((v) => !v)}
+              style={checkboxStyle}
+            />
+            {label}
+          </label>
+        ))}
       </div>
 
       {/* Display current FPS (frames per second) */}
-      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #444' }}>
+      <div
+        style={{
+          marginTop: 8,
+          paddingTop: 8,
+          borderTop: '1px solid #444',
+          fontSize: screenSize === 'small' ? 16 : 14,
+          userSelect: 'none',
+        }}
+      >
         <b>Performance Metrics</b>
         <br />
         FPS: {fps.toFixed(1)}
